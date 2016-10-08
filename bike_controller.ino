@@ -11,9 +11,9 @@ unsigned long ticksPerMinute = 0;   //Stores calculated ticks per minute NOT USE
 int threshCount = 0;                //Don't change. Initializes global variable for threshCounter
 
 // USER DEFINED VARIABLES
-unsigned long minSpeed = 50000;     // Minimum speed (max microseconds between ticks) to read. 
+unsigned long minSpeed = 200000;     // Minimum speed (max microseconds between ticks) to read. 
 unsigned long microsBuffer[40];     //Buffer of the last 40 readings. Used for averaging
-int bufferLength = 40;              //Length of reading buffer. Changing this should dynamically work, but make sure to CHANGE BUFFER ARRAY SIZE above. Bigger buffer = smoother data, but longer calc times and more RAM usage
+int bufferLength = 10;              //Length of reading buffer. Changing this should dynamically work, but make sure to CHANGE BUFFER ARRAY SIZE above. Bigger buffer = smoother data, but longer calc times and more RAM usage
 float threshold = 0.75f;            //Percentage required for addToMicrosBuffer() to accept data. Used to toss out bad readings due to bad paint job!
 
 
@@ -33,7 +33,9 @@ void loop() {                       //Main program loop
    
    if(sensorReading != lastSensorReading){
     elapsedMicros = micros() - lastMicros;        //Time difference between current time {micros()} and previous reading (lastMicros)
-    addToMicrosBuffer(elapsedMicros, threshold);  //Add the elapsed time to buffer (if threshold passes)
+    if(sensorReading == HIGH && lastSensorReading == LOW){
+      addToMicrosBuffer(elapsedMicros, threshold); //Add the elapsed time to buffer (if threshold passes)
+    }
     lastMicros = micros();                        //Reset the previous reading time
     lastSensorReading = sensorReading;            //Reset the previous reading value
     
