@@ -18,18 +18,18 @@ unsigned long lastMillis = 0;
 unsigned long elapsedMicros = 0;    //Stores the calculated elapsed microseconds
 unsigned long ticksPerMinute = 0;   //Stores calculated ticks per minute NOT USED YET
 int threshCount = 0;                //Don't change. Initializes global variable for threshCounter
-float lastMagRead = 0.0f;
-float Pi = 3.14159;
+float lastMagRead = 0.0f;           //Storage for last magnetometer reading
+float Pi = 3.14159;                 //It's PI!
 Servo fanOutput;                    //Fan output is using the servo library for PWM
 
 // USER DEFINED VARIABLES
-unsigned long minSpeed = 200000;     // Minimum speed (max microseconds between ticks) to read. 
+unsigned long minSpeed = 200000;    // Minimum speed (max microseconds between ticks) to read. 
 unsigned long microsBuffer[10];     //Buffer of the last XX readings. Used for averaging
 int bufferLength = 10;              //Length of reading buffer. Changing this should dynamically work, but make sure to CHANGE BUFFER ARRAY SIZE above. Bigger buffer = smoother data, but longer calc times and more RAM usage
 float threshold = 0.75f;            //Percentage required for addToMicrosBuffer() to accept data. Used to toss out bad readings due to bad paint job!
 unsigned long dataRate = 20;        // Data rate (in milliseconds) -- this is output rate over serial line
-int fanInitSpeed = 1000;
-int fanMinSpeed = 1200;             // Fan minimum rate. Needed for initialization. PWM range is from 1000 - 2000
+int fanInitSpeed = 1000;            // Fan minimum rate. Needed for initialization of ESCs. (No throttle) PWM range is from 1000 - 2000
+int fanMinSpeed = 1200;             // Minimum running fan speed. This needs to be high enough to idle without stalling
 int fanMaxSpeed = 1800;             // Max fan speed. Deliberately low to not overstress fans and ESCs
 
 
@@ -39,16 +39,16 @@ void setup() {
   pinMode(irPin, INPUT);
   
   initializeMicrosBuffer();         //Fill buffer with zeros
-  lastMicros = micros();            //Grab the microseconds since Arduino boot. This rolls over after ~70 minutes. could cause issues on long playtimes
+  lastMicros = micros();            //Grab the microseconds since Arduino boot. This rolls over after ~70 minutes.
   lastMillis = millis();
 
   Serial.begin(115200);             //Fast Serial Data. Ensure your console matches this rate!
 
    /* Enable auto-gain */
-  mag.enableAutoRange(true);
+  mag.enableAutoRange(true);        // Using auto gain on magnetometer. More sensitive as long as bike is stationary 
 
-  fanOutput.attach(servoPin);        //Attach servo (fan) to pin
-  fanOutput.write(fanInitSpeed);      //Initialize ESCs
+  fanOutput.attach(servoPin);       //Attach servo (fan) to pin
+  fanOutput.write(fanInitSpeed);    //Initialize ESCs -- must not change this too quickly
 
     /* Initialise the sensor */
   if(!mag.begin())
@@ -59,15 +59,13 @@ void setup() {
   }
 }
 
-void loop() {                       //Main program loop
+void loop() {   //Main program loop
 
-  
-  
    sensorReading = digitalRead(irPin); //IR sensor reading
    
-   if(sensorReading != lastSensorReading){
+   if(sensorReading != lastSensorReading){        //Change in IR reading
     elapsedMicros = micros() - lastMicros;        //Time difference between current time {micros()} and previous reading (lastMicros)
-    if(sensorReading == HIGH && lastSensorReading == LOW){
+    if(sensorReading == HIGH && lastSensorReading == LOW){ //This only passes on the RISING EDGE of the signal
       addToMicrosBuffer(elapsedMicros, threshold); //Add the elapsed time to buffer (if threshold passes)
     }
     lastMicros = micros();                        //Reset the previous reading time
@@ -76,7 +74,7 @@ void loop() {                       //Main program loop
 
   if(millis() - lastMillis >= dataRate){          //If it is time to send data down serial
     if(isMicrosBufferReady()){
-      sendToSerial();
+      sendToSerial();                             //Send all the datas
     }
     lastMillis = millis();                        //Reset last time 
   }
@@ -89,51 +87,51 @@ void loop() {                       //Main program loop
   updateFans();                                   //Updates fan outputs. Comment out if no fans...
 }
 
-void updateFans(){
+void updateFans(){                                //Updates the fan PWM signal
   float incomingFloat = 2.0f;
-  if(Serial.available() > 0){ // If there are bytes on the serial line
-    incomingFloat = Serial.parseFloat();//Grabs first float number on line. Breaks on first non-float character
+  if(Serial.available() > 0){                     // If there are bytes on the serial line
+    incomingFloat = Serial.parseFloat();          //Grabs first float number on line. Breaks on first non-float character
     while(Serial.available()>0)
     {
-      Serial.read(); // Flush remaining data
+      Serial.read();                              // Flush remaining data
     }
   }
-  else{return;} //Short circuit if none found
+  else{return;}                                   //Short circuit if none found
   
-  if(incomingFloat >= 0.0f && incomingFloat <= 1.0f){
+  if(incomingFloat >= 0.0f && incomingFloat <= 1.0f){ //If good data
     if(incomingFloat == 0.0f){
-      fanOutput.write(fanInitSpeed);
+      fanOutput.write(fanInitSpeed);              //If data is zero, reset to initilization speed
       return;
     }
     incomingFloat = (incomingFloat * (fanMaxSpeed - fanMinSpeed)) + fanMinSpeed; //Convert input of 0.0f to 1.0f to fan input range
-    fanOutput.write(incomingFloat);
+    fanOutput.write(incomingFloat);               //Set the PWM rate
   }
 }
 
-void sendToSerial(){ //Send data readings down serial line
+void sendToSerial(){                              //Send data readings down serial line
 
-  sensors_event_t event; //Grab Adafruit sensor event
-  mag.getEvent(&event); //Grab adafruit magnetometer event
+  sensors_event_t event;                          //Grab Adafruit sensor event
+  mag.getEvent(&event);                           //Grab adafruit magnetometer event
   
   float magEvent = 0.0f;
   float heading = (atan2(event.magnetic.y,event.magnetic.x));// * 180) / Pi;
 //  if (heading < 0) //Normalize
 //  {
 //    heading = 360 + heading;
-//  }
+//  } //Commented out code here is for using absolute degrees rather than radians. Radians controls better
   
-  if(heading == 0.0f){ //If reading failed. We seem to have random 0.0 readings, and this filters those out
+  if(heading == 0.0f){                             //If reading failed. We seem to have random 0.0 readings, and this filters those out
     magEvent = lastMagRead;
   }
   else{
-    magEvent = heading;
+    magEvent = heading;                            //Handling for failed reading
     lastMagRead = magEvent;
   }
 
   Serial.print(getAverageMicrosBuffer()); //Gets the average speed from buffer
-  Serial.print(","); //Comma seperated
-  Serial.print(magEvent); //Mag heading
-  Serial.println();  //Endline
+  Serial.print(",");                      //Comma seperated
+  Serial.print(magEvent);                 //Mag heading
+  Serial.println();                       //Endline
 }
 
 void initializeMicrosBuffer(){  //Fill the buffer with zeros
@@ -148,7 +146,7 @@ void addToMicrosBuffer(unsigned long value, float thresh){  //Add reading to buf
 //      threshCount++; //Increment threshcount for override
 //      return; 
 //   }
-//  }
+//  } //No thresholding for now. Found to work better in-game with this disabled
 
   for(int i = 0; i < bufferLength - 1; i++){ //Shift all elements to the left
     microsBuffer[i] = microsBuffer[i+1];
