@@ -3,7 +3,7 @@
 #include <Adafruit_LSM303_U.h>
 #include <Servo.h>
 
-/* Assign a unique ID to this sensor at the same time */
+/* Assign a unique ID to this sensor */
 Adafruit_LSM303_Mag_Unified mag = Adafruit_LSM303_Mag_Unified(12345);
 
 
